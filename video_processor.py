@@ -1,11 +1,11 @@
 import random
 from typing import List, Tuple, Union
 
-from tqdm import tqdm
 import cv2
 import librosa
 import numpy as np
 import torch
+from tqdm import tqdm
 import whisper
 
 random.seed(42)
@@ -34,7 +34,9 @@ class VideoProcessor(torch.nn.Module):
             text_tokenizer (_type_): text tokenizer
             image_processor (_type_): image tokenizer
             audio_model (str, optional): whisper model for audio to text. Defaults to 'base'.
-            training (bool): parameter to set if text and image models are to be trained
+            text_batch_size (int, optional): batch size for text processing. Defaults to 32.
+            device (torch.device, optional): device for processing. Defaults to torch.device("cuda:0").
+            chunk_size (int, optional): size of video chunks in seconds. Defaults to 2.
         """
         self.text_model = text_model
         self.image_model = image_model
@@ -51,13 +53,29 @@ class VideoProcessor(torch.nn.Module):
         self.text_projection = text_projection
         self.image_projection = image_projection
 
-    def __call__(self, video_loc: str) -> torch.tensor:
+    def __call__(self, video_loc: str) -> Tuple[torch.tensor, torch.tensor]:
+        """Process video frames and audio.
+
+        Args:
+            video_loc (str): Location of the video.
+
+        Returns:
+            Tuple[torch.tensor, torch.tensor]: Encoded frames and text.
+        """
         frames, audios = self.extract_frames_and_audio(video_loc)
         encoded_frames = self.vision_encoder(frames)
         encoded_text = self.audio_encoder(audios)
         return encoded_frames, encoded_text
 
-    def audio_encoder(self, audios):
+    def audio_encoder(self, audios: List[np.array]) -> torch.tensor:
+        """Encode audio data to text.
+
+        Args:
+            audios (List[np.array]): List of audio data.
+
+        Returns:
+            torch.tensor: Encoded text.
+        """
         text = self.extract_text(audios)
         encoded_text = []
         print("Encoding Text")
@@ -72,7 +90,15 @@ class VideoProcessor(torch.nn.Module):
         print("Encoding text completed")
         return torch.stack(encoded_text)
 
-    def vision_encoder(self, frames):
+    def vision_encoder(self, frames: torch.tensor) -> torch.tensor:
+        """Encode video frames.
+
+        Args:
+            frames (torch.tensor): Video frames.
+
+        Returns:
+            torch.tensor: Encoded frames.
+        """
         print("Encoding frames")
         encoded_frames = []
         with torch.inference_mode():
@@ -93,14 +119,14 @@ class VideoProcessor(torch.nn.Module):
     def extract_frames_and_audio(
         self,
         video_path: str,
-    ) -> Tuple[Union[torch.tensor, List[np.array]]]:
-        """Given a video path extracts frames and audio for every 2sec.
+    ) -> Tuple[torch.tensor, List[np.array]]:
+        """Extract frames and audio from video.
 
         Args:
-            video_path (str): location of the video
+            video_path (str): Location of the video.
 
         Returns:
-            list: list of frames and audio data
+            Tuple[torch.tensor, List[np.array]]: Extracted frames and audio data.
         """
         cap = cv2.VideoCapture(video_path)
         frames_per_clip = 6
@@ -139,19 +165,20 @@ class VideoProcessor(torch.nn.Module):
 
         print(f"Extracting {self.chunk_size} sec batches complete")
         cap.release()
+
         # Convert frames array to tensor
         converted_clips = torch.tensor(frames)
 
         return converted_clips, audio_clips
 
-    def extract_text(self, audios: List[np.array]):
-        """Method to process audios and convert to text.
+    def extract_text(self, audios: List[np.array]) -> List[str]:
+        """Extract text from audio data.
 
         Args:
-            audios (List[np.array]): list of audios in numpy array
+            audios (List[np.array]): List of audio data.
 
         Returns:
-            List[str]: list of text converted from audio
+            List[str]: Extracted text.
         """
         print("Extracting text from audio")
         text = []
