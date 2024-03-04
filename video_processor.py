@@ -11,18 +11,21 @@ import whisper
 random.seed(42)
 
 
-class VideoProcessor:
+class VideoProcessor(torch.nn.Module):
     def __init__(
         self,
         text_model,
         image_model,
         text_tokenizer,
         image_processor,
+        text_projection=None,
+        image_projection=None,
         audio_model="base",
         text_batch_size=32,
         device=torch.device("cuda:0"),
         chunk_size=2,
     ) -> None:
+        super(VideoProcessor, self).__init__()
         """Module to process videos.
 
         Args:
@@ -37,15 +40,19 @@ class VideoProcessor:
         self.image_model = image_model
         self.text_tokenizer = text_tokenizer
         self.image_processor = image_processor
-        self.audio_model = whisper.load_model("base")
+        self.audio_model = whisper.load_model(
+            "base",
+            device=device,
+        )
         self.training = image_model.training or text_model.training
         self.text_batch_size = text_batch_size
         self.device = device
         self.chunk_size = chunk_size
+        self.text_projection = text_projection
+        self.image_projection = image_projection
 
     def __call__(self, video_loc: str) -> torch.tensor:
         frames, audios = self.extract_frames_and_audio(video_loc)
-        self.check_models()
         encoded_frames = self.vision_encoder(frames)
         encoded_text = self.audio_encoder(audios)
         return encoded_frames, encoded_text
@@ -58,7 +65,10 @@ class VideoProcessor:
             tokenized_text = self.text_tokenizer(text_sample, return_tensors="pt").to(
                 self.device
             )
-            encoded_text.append(self.text_model(**tokenized_text).pooler_output)
+            pooler_text = self.text_model(**tokenized_text).pooler_output
+            if self.text_projection:
+                pooler_text = self.text_projection(pooler_text)
+            encoded_text.append(pooler_text)
         print("Encoding text completed")
         return torch.stack(encoded_text)
 
@@ -73,18 +83,12 @@ class VideoProcessor:
                 encoded_frame = self.image_model(**processed_frames).pooler_output.mean(
                     axis=0
                 )
+                if self.image_projection:
+                    encoded_frame = self.image_projection(encoded_frame)
                 encoded_frames.append(encoded_frame)
 
         print("Encoding frames done")
         return torch.stack(encoded_frames)
-
-    def check_models(self):
-        if self.training:
-            self.image_model = self.image_model.train()
-            self.text_model = self.text_model.train()
-        else:
-            self.image_model = self.image_model.eval()
-            self.text_model = self.text_model.eval()
 
     def extract_frames_and_audio(
         self,
@@ -141,7 +145,7 @@ class VideoProcessor:
         return converted_clips, audio_clips
 
     def extract_text(self, audios: List[np.array]):
-        """Method to process audios and covnevrt to text.
+        """Method to process audios and convert to text.
 
         Args:
             audios (List[np.array]): list of audios in numpy array
@@ -149,7 +153,9 @@ class VideoProcessor:
         Returns:
             List[str]: list of text converted from audio
         """
+        print("Extracting text from audio")
         text = []
-        for audio in audios:
+        for audio in tqdm(audios):
             text.append(self.audio_model.transcribe(audio)["text"])
+        print("Extracting text from audio completed")
         return text
