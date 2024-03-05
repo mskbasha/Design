@@ -1,16 +1,18 @@
-from PIL import Image
 import torch
 import pickle
 from tqdm import tqdm
-import requests
+import time
 import pickle
 import torch
 import os
 from video_processor import VideoProcessor
 from transformers import CLIPProcessor, CLIPModel
 
+
+print("loading model")
 clip_model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32")
 processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
+print("loaded Model")
 vp = VideoProcessor(
     clip_model.text_model,
     clip_model.vision_model,
@@ -20,20 +22,19 @@ vp = VideoProcessor(
     clip_model.visual_projection,
     device="cpu",
 )
-vp = vp.to("cuda:2")
+vp = vp.to("cuda:0")
 
-vp.device = torch.device("cuda:2")
+vp.device = torch.device("cuda:0")
 
 os.getcwd()
-video_dir = "/home/basha_2211ai03/complaint_detection/videos/dataset"
-videos = os.listdir(video_dir)
+video_dir = "/DATA/sarmistha_2221cs21/basha/VideoMAE/dataset"
+videos = [x for x in os.listdir(video_dir) if x.endswith(".mp4")]
 
 try:
     with open("data.pkl", "rb") as f:
         encoded_data = pickle.load(f)
 except:
     encoded_data = {}
-
 with torch.inference_mode():
     for video in tqdm(videos):
         with open("output.txt", "a") as f1:
@@ -46,5 +47,5 @@ with torch.inference_mode():
                 with open("data.pkl", "wb") as f:
                     pickle.dump(encoded_data, f)
                 f1.write("processing Done\n")
-            except:
-                f1.write("Processing Failed\n")
+            except Exception as e:
+                f1.write("Processing Failed {e}\n")
