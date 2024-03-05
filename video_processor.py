@@ -40,16 +40,20 @@ class VideoProcessor(torch.nn.Module):
         self.image_model = image_model
         self.text_tokenizer = text_tokenizer
         self.image_processor = image_processor
-        self.audio_model = whisper.load_model(
-            "base",
-            device=device,
-        )
+        if audio_model == "base":
+            self.audio_model = whisper.load_model(
+                "base",
+                device=device,
+            )
+        else:
+            self.audio_model = audio_model
         self.training = image_model.training or text_model.training
         self.text_batch_size = text_batch_size
         self.device = device
         self.chunk_size = chunk_size
         self.text_projection = text_projection
         self.image_projection = image_projection
+        self.cache = {}
 
     def __call__(self, video_loc: str) -> torch.tensor:
         frames, audios = self.extract_frames_and_audio(video_loc)
@@ -81,7 +85,6 @@ class VideoProcessor(torch.nn.Module):
         print("Encoding text completed")
         return torch.stack(encoded_text)
 
-    @torch.inference_mode
     def vision_encoder(self, frames: List[np.array]) -> torch.tensor:
         """Method to encode frames
 
@@ -161,7 +164,11 @@ class VideoProcessor(torch.nn.Module):
         """
         print("Extracting text from audio")
         text = []
+        input_hash = hash(np.array(audios).data.tobytes())
+        if input_hash in self.cache:
+            return self.cache[input_hash]
         for audio in tqdm(audios):
             text.append(self.audio_model.transcribe(audio)["text"])
         print("Extracting text from audio completed")
+        self.cache[input_hash] = text
         return text
