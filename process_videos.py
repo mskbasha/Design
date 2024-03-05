@@ -27,11 +27,11 @@ vp = vp.to("cuda:0")
 vp.device = torch.device("cuda:0")
 
 os.getcwd()
-video_dir = "/DATA/sarmistha_2221cs21/basha/VideoMAE/dataset"
+video_dir = "/DATA/sarmistha_2221cs21/basha/VideoMAE/dataset_224x224"
 videos = [x for x in os.listdir(video_dir) if x.endswith(".mp4")]
 
 try:
-    with open("data.pkl", "rb") as f:
+    with open("video_mae_data.pkl", "rb") as f:
         encoded_data = pickle.load(f)
 except:
     encoded_data = {}
@@ -44,7 +44,7 @@ with torch.inference_mode():
             try:
                 out = vp(os.path.join(video_dir, video))
                 encoded_data[video] = out
-                with open("data.pkl", "wb") as f:
+                with open("video_mae_data.pkl", "wb") as f:
                     pickle.dump(encoded_data, f)
                 f1.write("processing Done\n")
             except Exception as e:

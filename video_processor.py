@@ -57,42 +57,57 @@ class VideoProcessor(torch.nn.Module):
         encoded_text = self.audio_encoder(audios)
         return encoded_frames, encoded_text
 
-    def audio_encoder(self, audios):
+    def audio_encoder(self, audios: List[np.array]) -> torch.tensor:
+        """Method to encode audio given audio in numpy array format.
+
+        Args:
+            audios (List[np.array]): list of numpy arrays of sr 16000
+
+        Returns:
+            torch.tensor: encoded audio
+        """
         text = self.extract_text(audios)
         encoded_text = []
         print("Encoding Text")
-        for text_sample in tqdm(text):
-            tokenized_text = self.text_tokenizer(text_sample, return_tensors="pt").to(
-                self.device
-            )
-            pooler_text = self.text_model(**tokenized_text).pooler_output
-            if self.text_projection:
-                pooler_text = self.text_projection(pooler_text)
-            encoded_text.append(pooler_text)
+        with torch.inference_mode(not self.training):
+            for text_sample in tqdm(text):
+                tokenized_text = self.text_tokenizer(
+                    text_sample, return_tensors="pt"
+                ).to(self.device)
+                pooler_text = self.text_model(**tokenized_text).pooler_output
+                if self.text_projection:
+                    pooler_text = self.text_projection(pooler_text)
+                encoded_text.append(pooler_text)
         print("Encoding text completed")
         return torch.stack(encoded_text)
 
-    def vision_encoder(self, frames):
+    @torch.inference_mode
+    def vision_encoder(self, frames: List[np.array]) -> torch.tensor:
+        """Method to encode frames
+
+        Args:
+            frames (list[np.array]): list of numpy arrays of size 224 x 224
+
+        Returns:
+            torch.tensor: encoded frames in
+        """
         print("Encoding frames")
-        encoded_frames = []
-        with torch.inference_mode():
+        with torch.inference_mode(not self.training):
+            encoded_frames = []
             for frame_batch in tqdm(frames):
                 processed_frames = self.image_processor(
                     frame_batch, return_tensors="pt"
                 ).to(self.device)
-                encoded_frame = self.image_model(**processed_frames).pooler_output.mean(
-                    axis=0
+                encoded_frames.append(
+                    self.image_model(**processed_frames)
+                    .last_hidden_state.mean(1)
+                    .squeeze()
                 )
-                if self.image_projection:
-                    encoded_frame = self.image_projection(encoded_frame)
-                encoded_frames.append(encoded_frame)
-
         print("Encoding frames done")
         return torch.stack(encoded_frames)
 
     def extract_frames_and_audio(
-        self,
-        video_path: str,
+        self, video_path: str, number_of_frames_to_extract=16
     ) -> Tuple[Union[torch.tensor, List[np.array]]]:
         """Given a video path extracts frames and audio for every 2sec.
 
@@ -103,46 +118,37 @@ class VideoProcessor(torch.nn.Module):
             list: list of frames and audio data
         """
         cap = cv2.VideoCapture(video_path)
-        frames_per_clip = 6
         frame_rate = int(cap.get(cv2.CAP_PROP_FPS))
         frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-        audio_data, _ = librosa.load(video_path, sr=16000)
+        print("Extracting frame chunks")
 
+        def extract_frame(indices: List[int]) -> np.array:
+            cap = cv2.VideoCapture(video_path)
+            frames = []
+            for ind in indices:
+                cap.set(cv2.CAP_PROP_POS_FRAMES, ind)
+                ret, frame = cap.read()
+                if ret:
+                    frames.append(cv2.resize(frame, (224, 224)))
+            return frames
+
+        frame_indices = []
         frames = []
-        audio_clips = []
-        print(f"Extracting {self.chunk_size} sec batches")
-        for i in tqdm(
-            range(
-                0,
-                frame_count - frame_rate * self.chunk_size,
-                frame_rate * self.chunk_size,
-            )
-        ):
-            clip_frames = []
-            frame_indices = random.sample(
-                range(i, i + frame_rate * self.chunk_size), frames_per_clip
-            )
-            for index in frame_indices:
-                cap.set(cv2.CAP_PROP_POS_FRAMES, index)
-                success, frame = cap.read()
-                if not success:
-                    break
-                clip_frames.append(cv2.resize(frame, (225, 225)))
-            if len(clip_frames) == frames_per_clip:
-                frames.append(clip_frames)
-                start_frame = i
-                end_frame = i + frame_rate * 2
-                start_audio = int(start_frame * len(audio_data) / frame_count)
-                end_audio = int(end_frame * len(audio_data) / frame_count)
-                audio_clip = audio_data[start_audio:end_audio]
-                audio_clips.append(audio_clip)
-
-        print(f"Extracting {self.chunk_size} sec batches complete")
-        cap.release()
-        # Convert frames array to tensor
-        converted_clips = torch.tensor(frames)
-
-        return converted_clips, audio_clips
+        for index in tqdm(range(frame_count)):
+            frame_indices.append(index)
+            if (index + 1) % (self.chunk_size * frame_rate) == 0:
+                indices = sorted(
+                    random.sample(frame_indices, number_of_frames_to_extract)
+                )
+                frames.append(extract_frame(indices))
+        audio_data, _ = librosa.load(video_path, sr=16000)
+        last_ind = 0
+        audio_chunk_size = len(audio_data) // len(frames)
+        audios = []
+        print("Extracting audio chunks")
+        for i in tqdm(range(len(frames))):
+            audios.append(audio_data[i * audio_chunk_size : (i + 1) * audio_chunk_size])
+        return frames, audios
 
     def extract_text(self, audios: List[np.array]):
         """Method to process audios and convert to text.
