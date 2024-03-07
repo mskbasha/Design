@@ -2,6 +2,7 @@ import random
 from typing import List, Tuple, Union
 
 from tqdm import tqdm
+import logging
 import cv2
 import librosa
 import numpy as np
@@ -73,6 +74,7 @@ class VideoProcessor(torch.nn.Module):
         text = self.extract_text(audios)
         encoded_text = []
         print("Encoding Text")
+        logging.info("Encoding Text")
         with torch.inference_mode(not self.training):
             for text_sample in tqdm(text):
                 tokenized_text = self.text_tokenizer(
@@ -83,6 +85,7 @@ class VideoProcessor(torch.nn.Module):
                     pooler_text = self.text_projection(pooler_text)
                 encoded_text.append(pooler_text)
         print("Encoding text completed")
+        logging.info("Encoding text completed")
         return torch.stack(encoded_text)
 
     def vision_encoder(self, frames: List[np.array]) -> torch.tensor:
@@ -95,6 +98,7 @@ class VideoProcessor(torch.nn.Module):
             torch.tensor: encoded frames in
         """
         print("Encoding frames")
+        logging.info("Encoding frames")
         with torch.inference_mode(not self.training):
             encoded_frames = []
             for frame_batch in tqdm(frames):
@@ -107,6 +111,7 @@ class VideoProcessor(torch.nn.Module):
                     .squeeze()
                 )
         print("Encoding frames done")
+        logging.info("Encoding frames done")
         return torch.stack(encoded_frames)
 
     def extract_frames_and_audio(
@@ -124,6 +129,7 @@ class VideoProcessor(torch.nn.Module):
         frame_rate = int(cap.get(cv2.CAP_PROP_FPS))
         frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
         print("Extracting frame chunks")
+        logging.info("Extracting frame chunks")
 
         def extract_frame(indices: List[int]) -> np.array:
             cap = cv2.VideoCapture(video_path)
@@ -144,13 +150,16 @@ class VideoProcessor(torch.nn.Module):
                     random.sample(frame_indices, number_of_frames_to_extract)
                 )
                 frames.append(extract_frame(indices))
+        logging.info("Extracted frame chunks")
         audio_data, _ = librosa.load(video_path, sr=16000)
         last_ind = 0
         audio_chunk_size = len(audio_data) // len(frames)
         audios = []
         print("Extracting audio chunks")
+        logging.info("Extracting audio chunks")
         for i in tqdm(range(len(frames))):
             audios.append(audio_data[i * audio_chunk_size : (i + 1) * audio_chunk_size])
+        logging.info("Extracted audio chunks")
         return frames, audios
 
     def extract_text(self, audios: List[np.array]):
@@ -163,6 +172,7 @@ class VideoProcessor(torch.nn.Module):
             List[str]: list of text converted from audio
         """
         print("Extracting text from audio")
+        logging.info("Extracting text from audio using whisper")
         text = []
         input_hash = hash(np.array(audios).data.tobytes())
         if input_hash in self.cache:
@@ -170,5 +180,6 @@ class VideoProcessor(torch.nn.Module):
         for audio in tqdm(audios):
             text.append(self.audio_model.transcribe(audio)["text"])
         print("Extracting text from audio completed")
+        logging.info("Done")
         self.cache[input_hash] = text
         return text

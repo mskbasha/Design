@@ -7,3 +7,7 @@ reduce_resolution.txt
 Z98oCHIsYnETEMP_MPY_wvf_snd.mp3
 frames_audio__gPgueccVzw.pkl
 wzY-b2Vj9UgTEMP_MPY_wvf_snd.mp3
+data/video_mae_data.pkl
+logs/clip.log
+logs/video_mae.log
+logs/video_mae_output_logs.log

@@ -2,25 +2,35 @@ import torch
 import pickle
 from tqdm import tqdm
 import time
+import logging
 import pickle
 import torch
 import os
 from video_processor import VideoProcessor
 from transformers import CLIPProcessor, CLIPModel
+from transformers import AutoImageProcessor, VideoMAEModel
 
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s",
+    filename="logs/clip.log",
+    filemode="a",
+)
 
 print("loading model")
+logging.info("Loading Model")
 clip_model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32")
 processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
+video_processor = AutoImageProcessor.from_pretrained("MCG-NJU/videomae-base")
+video_mae = VideoMAEModel.from_pretrained("MCG-NJU/videomae-base")
+logging.info("Loaded Model")
 print("loaded Model")
 vp = VideoProcessor(
     clip_model.text_model,
-    clip_model.vision_model,
+    video_mae,
     processor.tokenizer,
-    processor.image_processor,
-    clip_model.text_projection,
-    clip_model.visual_projection,
-    device="cpu",
+    video_processor,
+    text_projection=clip_model.text_projection,
 )
 vp = vp.to("cuda:0")
 
@@ -31,21 +41,23 @@ video_dir = "/DATA/sarmistha_2221cs21/basha/VideoMAE/dataset_224x224"
 videos = [x for x in os.listdir(video_dir) if x.endswith(".mp4")]
 
 try:
-    with open("video_mae_data.pkl", "rb") as f:
+    with open("data/video_mae_data.pkl", "rb") as f:
         encoded_data = pickle.load(f)
 except:
     encoded_data = {}
 with torch.inference_mode():
+    vp = vp.eval()
     for video in tqdm(videos):
-        with open("output.txt", "a") as f1:
-            f1.write(f"Processing {video} started\t\t")
-            if video in encoded_data:
-                continue
-            try:
-                out = vp(os.path.join(video_dir, video))
-                encoded_data[video] = out
-                with open("video_mae_data.pkl", "wb") as f:
-                    pickle.dump(encoded_data, f)
-                f1.write("processing Done\n")
-            except Exception as e:
-                f1.write("Processing Failed {e}\n")
+        logging.info(("-" * 10) + f"Processing {video} started\t\t" + ("-" * 10))
+        if video in encoded_data:
+            continue
+        try:
+            out = vp(os.path.join(video_dir, video))
+            encoded_data[video] = out
+            with open("data/video_mae_data.pkl", "wb") as f:
+                pickle.dump(encoded_data, f)
+            logging.info(("-" * 10) + "processing Done\n" + ("-" * 10))
+        except Exception as e:
+            logging.warning(("X" * 10) + f"Processing Failed {e}\n" + ("X" * 10))
+logging.info("#" * 100)
+logging.info("Completed processing Videos")
