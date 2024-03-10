@@ -1,11 +1,13 @@
+import os
+import pickle
+
+import psutil
 import torch
 from tqdm import tqdm
-import psutil
-import pickle
-import os
+from transformers import (AutoImageProcessor, CLIPModel, CLIPProcessor,
+                          VideoMAEModel)
+
 from video_processor import VideoProcessor
-from transformers import CLIPProcessor, CLIPModel
-from transformers import AutoImageProcessor, VideoMAEModel
 
 print("Loading model")
 clip_model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32")

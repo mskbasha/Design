@@ -1,13 +1,13 @@
+import logging
 import random
 from typing import List, Tuple, Union
 
-from tqdm import tqdm
-import logging
 import cv2
 import librosa
 import numpy as np
 import torch
 import whisper
+from tqdm import tqdm
 
 random.seed(42)
 

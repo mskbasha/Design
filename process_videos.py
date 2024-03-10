@@ -1,14 +1,14 @@
-import torch
-import pickle
-from tqdm import tqdm
-import time
 import logging
-import pickle
-import torch
 import os
+import pickle
+import time
+
+import torch
+from tqdm import tqdm
+from transformers import (AutoImageProcessor, CLIPModel, CLIPProcessor,
+                          VideoMAEModel)
+
 from video_processor import VideoProcessor
-from transformers import CLIPProcessor, CLIPModel
-from transformers import AutoImageProcessor, VideoMAEModel
 
 logging.basicConfig(
     level=logging.INFO,
