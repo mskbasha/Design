@@ -1,5 +1,5 @@
 from typing import List, Tuple
-
+import copy
 import torch
 
 
@@ -44,6 +44,7 @@ def filter_and_pad_outputs(outputs: List[List[int]]) -> torch.Tensor:
         torch.Tensor: Padded output tensor.
     """
     max_len = max([len(x) for x in outputs])
+    outputs = copy.deepcopy(outputs)
     for sample in outputs:
         for _ in range(max_len - len(sample)):
             sample.append(0)
