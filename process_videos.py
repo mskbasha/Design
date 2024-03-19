@@ -5,15 +5,14 @@ import time
 
 import torch
 from tqdm import tqdm
-from transformers import (AutoImageProcessor, CLIPModel, CLIPProcessor,
-                          VideoMAEModel)
+from transformers import AutoImageProcessor, CLIPModel, CLIPProcessor, VideoMAEModel
 
 from video_processor import VideoProcessor
 
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(levelname)s - %(message)s",
-    filename="logs/clip.log",
+    filename="logs/videoMAE_again for 471 videos.log",
     filemode="a",
 )
 
